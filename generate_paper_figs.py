@@ -7,11 +7,61 @@ import fit2dpolynomial
 import matplotlib
 import copy
 
+def min_dists(dataset):
+    dists = []
+    for k, trajec in dataset.trajecs.items():
+        dists.append(trajec.dist_to_stim_r_normed[trajec.frame_nearest_to_post])
+    print np.min(dists)
+    print np.max(dists)
+    
+
+def altitude_at_landing(dataset):
+    
+    alts = []
+    for k, trajec in dataset.trajecs.items():
+        alts.append(trajec.positions[trajec.frame_of_landing,2])
+    
+    print np.mean(alts)
+    print np.std(alts)
+
+
+def post_angle_over_distance(dataset):
+    
+    dists = []
+    post_angles = []
+    
+    for k, trajec in dataset.trajecs.items():
+        dists.extend(trajec.dist_to_stim_r_normed[trajec.frames].tolist())
+        post_angles.extend(trajec.angle_to_post[trajec.frames].tolist())
+
+    bins = np.linspace(0, 0.2, 10, endpoint=True)
+    
+    def get_bin(dist):
+        loedge = np.where( dist >= bins )[0][-1]
+        hiedge = np.where( dist < bins )[0][0]
+
 
 def make_colorbar():
     ticks = [0, 0.05, .1]
     fpl.colorbar(ax=None, ticks=ticks, colormap='jet', aspect=20, orientation='horizontal', filename='colorbar_for_saccade_plots.pdf', flipspine=True)
     
+def get_summary_hists(dataset_flyby, dataset_landing):
+    
+    flyby_curves = flyby_histograms(dataset_flyby, dataset_landing, plot=False, normed=True)
+    landing_curves = landing_histograms(dataset_landing, plot=False, normed=True)
+    
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    
+    print flyby_curves
+    
+    ax.fill_between(flyby_curves[0][0], flyby_curves[0][1], np.zeros_like(flyby_curves[0][1]), color='orange')
+    ax.fill_between(landing_curves[0][0], landing_curves[0][1], np.zeros_like(landing_curves[0][1]), color='blue')
+    
+    yticks = np.linspace(0, 1, 3, endpoint=True)
+    set_log_ticks(ax, yticks, radians=True)
+    
+    fig.savefig('hists_for_summary.pdf', format='pdf')
 
 def saccade_plot_landings_and_flybys(dataset_landing, dataset_flyby):
     
@@ -42,7 +92,7 @@ def angle_to_post_before_saccade(dataset_flyby, dataset_nopost_flyby):
     bins = np.linspace(-540, 540, 80, endpoint=True)
     fpl.histogram(ax, [flyby_angle_before, nopost_angle_before], colors=['black', 'green'], bins=bins, edgecolor='none', bar_alpha=0.8, curve_fill_alpha=0.3, curve_line_alpha=0, curve_butter_filter=[3,0.3], return_vals=False, show_smoothed=True, normed=True, normed_occurences=False, bootstrap_std=False, exponential_histogram=False, bin_width_ratio=0.8)
     
-    # prep plot    
+    # prep plot    heat
     def prep_plot(ax, sym=True):
         xticks = [-180, -90, 0, 90, 180]
         yticks = [0, .01]
@@ -204,6 +254,8 @@ def landing_saccade_plot(dataset, edge='none', plot=True):
         colornorm = matplotlib.colors.Normalize(0,0.1)
         ax.scatter(angle_to_post*180/np.pi, turn_angle*180./np.pi, c=d, linewidth=0, s=3, norm=colornorm)
 
+    print 'landing n: ', len(angle_to_post)
+
     # calculate and plot linear regression    
     fitfmin, std_error, Rsq = linear_fit.linear_fit_type1(angle_to_post*180/np.pi, turn_angle*180/np.pi, full_output=True, remove_outliers=True)
     
@@ -213,9 +265,14 @@ def landing_saccade_plot(dataset, edge='none', plot=True):
     ydata_m = -1*std_error*2 + ydata
     
     if plot:
-        ax.plot(xdata, ydata, '-', color='black', zorder=-1)
-        ax.fill_between(xdata, ydata_p, ydata_m, color='black', alpha=0.3, linewidth=0, zorder=-1)
-    
+        #ax.plot(xdata, ydata, '-', color='black', zorder=-1)
+        #ax.fill_between(xdata, ydata_p, ydata_m, color='black', alpha=0.3, linewidth=0, zorder=-1)
+        commanded_turn = 1*xdata
+        actual_turn = 0.4*np.tan( (commanded_turn)*np.pi/180./2.)*180/np.pi  + commanded_turn
+        ax.plot(xdata, actual_turn, '-', color='black', zorder=-1)
+        ax.plot(xdata, commanded_turn, '--', color='black', zorder=-1)
+  
+        
     if plot is False:
         return xdata, ydata, std_error
 
@@ -291,7 +348,7 @@ def flyby_saccade_plot(dataset, dataset_landing=None, edge='none', show_regressi
     fpl.adjust_spines(ax, ['left', 'bottom'], xticks=ticks, yticks=ticks, smart_bounds=True)
     ax.set_aspect('equal')
     
-    ax.deceset_xlim([np.min(ticks), np.max(ticks)])
+    ax.set_xlim([np.min(ticks), np.max(ticks)])
     ax.set_ylim([np.min(ticks), np.max(ticks)])
     
     xlabel = 'Angle to post'
@@ -336,6 +393,249 @@ def flyby_saccade_plot_flipsy(dataset, dataset_landing):
     fname = 'flyby_saccade_plot_flipsy.pdf'
     fig.savefig(fname, format='pdf')
     
+    
+def flyby_saccade_plot_before_after_turn(dataset):
+    angle_to_post_before = dataset.saccades.angle_to_post
+    angle_to_post_after = dataset.saccades.angle_to_post_after_turn
+    
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    
+    ax.scatter(angle_to_post_before*180/np.pi, angle_to_post_after*180/np.pi, s=3, linewidth=0)
+    
+    # prep plot    
+    yticks = [-180, -90, 0, 90, 180]
+    xticks = [-180, -90, 0, 90, 180]
+    fpl.adjust_spines(ax, ['left', 'bottom'], xticks=xticks, yticks=yticks, smart_bounds=True)
+    ax.set_aspect('equal')
+    
+    ax.set_xlim([np.min(xticks), np.max(xticks)])
+    ax.set_ylim([np.min(yticks), np.max(yticks)])
+    
+    xlabel = 'Angle to post before turn'
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel('Angle to post after turn')
+    
+    
+    fig.savefig('flyby_saccade_plot_before_after_turn.pdf', format='pdf')
+    
+    
+def flyby_saccade_plot_left_right_simple_models(dataset, dataset_landing=None):
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    
+    angle_to_post = dataset.saccades.angle_to_post
+    turn_angle = dataset.saccades.true_turn_angle
+    angle_to_post_after_turn = dataset.saccades.angle_to_post_after_turn
+    
+    post_type = 0
+    
+    right = np.where( (turn_angle < 0)*(turn_angle < angle_to_post)*(post_type == dataset.saccades.post_type) )[0].tolist()
+    right_outliers = np.where( (turn_angle < 0)*(turn_angle > angle_to_post)*(post_type == dataset.saccades.post_type) )[0].tolist()
+    left = np.where( (turn_angle > 0)*(turn_angle > angle_to_post)*(post_type == dataset.saccades.post_type) )[0].tolist()
+    left_outliers = np.where( (turn_angle > 0)*(turn_angle < angle_to_post)*(post_type == dataset.saccades.post_type) )[0].tolist()
+    
+    print len(right), len(right_outliers), len(left), len(left_outliers)
+
+    # red    
+    def plot_symmetric(ax, direction, outliers, color):
+        ax.scatter(-1*angle_to_post[direction]*180/np.pi, -1*turn_angle[direction]*180/np.pi, c=color, s=3, alpha=0.5, linewidth=0)
+        ax.scatter(-1*angle_to_post[outliers]*180/np.pi, -1*turn_angle[outliers]*180/np.pi, c=color, s=3, alpha=0.5, linewidth=0.5)
+     
+    def plot_data():
+        ax.scatter(angle_to_post[right]*180/np.pi, turn_angle[right]*180/np.pi, c='blue', s=3, alpha=1, linewidth=0)
+        ax.scatter(angle_to_post[left]*180/np.pi, turn_angle[left]*180/np.pi, c='red', s=3, alpha=1, linewidth=0)
+        
+        ax.scatter(angle_to_post[right_outliers]*180/np.pi, turn_angle[right_outliers]*180/np.pi, c='blue', s=3, alpha=0.5, linewidth=0)
+        ax.scatter(angle_to_post[left_outliers]*180/np.pi, turn_angle[left_outliers]*180/np.pi, c='red', s=3, alpha=0.5, linewidth=0)
+    
+    def plot_cluster_fit(direction, indices):
+        if direction == 'right':
+            sign = -1
+            color = 'blue'
+            xdata = np.linspace(-85, 180, 1000, endpoint=True)
+        else:
+            sign = 1
+            color = 'red'
+            xdata = np.linspace(-180, 180, 1000, endpoint=True)
+            
+            
+        if 0:
+            commanded_turn = 1*xdata+ sign*(90)
+            actual_turn = 0.5*np.tan( (commanded_turn)*np.pi/180./2)*180/np.pi  + commanded_turn
+            ax.plot(xdata, actual_turn, color=color)
+            ax.plot(xdata, commanded_turn, '--', color=color)
+            
+            errs = []
+            for i in indices:
+                pt = np.array([angle_to_post[i]*180/np.pi, turn_angle[i]*180/np.pi])
+                errs.append(floris_math.dist_to_curve(pt, xdata, actual_turn))
+                
+            print 'mean err: ', np.mean(errs)
+            print 'std err: ', np.std(errs)
+            
+            s = '\n' + ' std: ' + str(np.std(errs))
+            if 0:
+                if direction == 'right':
+                    ax.text( 50, -100, s, color=color)
+                if direction == 'left':
+                    ax.text( -50, 100, s, color=color)
+            
+        
+        # Regression
+        if 1:
+            fitfmin, std_error, Rsq = linear_fit.linear_fit_type2(angle_to_post[indices]*180/np.pi, turn_angle[indices]*180/np.pi, full_output=True, remove_outliers=True)
+            xdata = np.linspace(-180, 180, 10, endpoint=True)
+            ydata = np.polyval(fitfmin, xdata)
+            
+            ax.plot(xdata, ydata, '-', color=color)
+            eqn = 'y = ' + str(fitfmin[0])[0:5] + 'x + ' + str(fitfmin[1])[0:5]
+            rsq = 'Rsq: ' + str(Rsq)[0:5]
+            s = eqn + '\n' + rsq + '\n' + 'N= ' + str(len(indices))
+            if direction == 'right':
+                ax.text( 50, -100, s, color=color)
+            if direction == 'left':
+                ax.text( -50, 100, s, color=color)
+            
+    plot_data()
+    #plot_symmetric(ax, right, right_outliers, 'blue')
+    #plot_symmetric(ax, left, left_outliers, 'red')
+    plot_cluster_fit('right', right)
+    plot_cluster_fit('left', left)
+    
+    if dataset_landing is not None:
+        ax.scatter(dataset_landing.saccades.angle_to_post*180/np.pi, dataset_landing.saccades.true_turn_angle*180./np.pi, c='green', linewidth=0, s=3)
+        xdata = np.linspace(-180, 180, 200, endpoint=True)
+        commanded_turn = 1*xdata
+        actual_turn = 0.4*np.tan( (commanded_turn)*np.pi/180./2.)*180/np.pi  + commanded_turn
+        ax.plot(xdata, commanded_turn, '--', color='green')
+        ax.plot(xdata, actual_turn, '-', color='green')
+    
+    
+    # prep plot    
+    yticks = [-270, -180, -90, 0, 90, 180, 270]
+    xticks = [-270, -180, -90, 0, 90, 180, 270]
+    fpl.adjust_spines(ax, ['left', 'bottom'], xticks=xticks, yticks=yticks, smart_bounds=True)
+    ax.set_aspect('equal')
+    
+    ax.set_xlim([np.min(xticks), np.max(xticks)])
+    ax.set_ylim([np.min(yticks), np.max(yticks)])
+    
+    xlabel = 'Angle to post before turn'
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel('Turn angle')
+    
+    fname = 'flyby_saccade_plot_flipsy.pdf'
+    fig.savefig(fname, format='pdf')
+    
+
+def flyby_saccade_plot_clustered_by_after_turn(dataset, dataset_landing=None):
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    
+    angle_to_post = dataset.saccades.angle_to_post
+    turn_angle = dataset.saccades.true_turn_angle
+    angle_to_post_after_turn = dataset.saccades.angle_to_post_after_turn
+    
+    right = np.where(angle_to_post_after_turn > 0)[0].tolist()
+    left = np.where(angle_to_post_after_turn < 0)[0].tolist()
+
+    # red    
+    def plot_wrapped(ax, direc1, direc2, color):
+        #ax.scatter(angle_to_post[direc1]*180/np.pi, turn_angle[direc1]*180/np.pi, c=color, s=3, alpha=0.5, linewidth=0)
+        ax.scatter(-1*angle_to_post[direc2]*180/np.pi, -1*turn_angle[direc2]*180/np.pi, c=color, s=3, alpha=0.5, linewidth=0)
+        #duplicate
+        #ax.scatter(angle_to_post[direc1]*180/np.pi, turn_angle[direc1]*180/np.pi+360, c=color, s=3, alpha=0.5, linewidth=0)
+        #ax.scatter(angle_to_post[direc1]*180/np.pi, turn_angle[direc1]*180/np.pi-360, c=color, s=3, alpha=0.5, linewidth=0)
+        #ax.scatter(-1*angle_to_post[direc2]*180/np.pi, -1*turn_angle[direc2]*180/np.pi+360, c=color, s=3, alpha=0.5, linewidth=0)
+        #ax.scatter(-1*angle_to_post[direc2]*180/np.pi, -1*turn_angle[direc2]*180/np.pi-360, c=color, s=3, alpha=0.5, linewidth=0)
+     
+    def plot_unwrapped():
+        ax.scatter(angle_to_post[right]*180/np.pi, turn_angle[right]*180/np.pi, c='red', s=3, alpha=1, linewidth=0)
+        colornorm = matplotlib.colors.Normalize(0,1.5,clip=True)
+        d = np.abs(dataset.saccades.xvelocity[left])
+        ax.scatter(angle_to_post[left]*180/np.pi, turn_angle[left]*180/np.pi, c='blue', norm=colornorm, s=3, alpha=1, linewidth=0)
+    
+    #plot_wrapped(ax, right, left, 'red')
+    
+    #fpl.scatter(ax, angle_to_post*180/np.pi, turn_angle*180/np.pi+180, color=dataset.saccades.speed, radius=3)
+    
+    def plot_cluster_fit(direction):
+        
+        if direction == 'right':
+            sign = -1
+            color = 'red'
+            xdata = np.linspace(-85, 180, 200, endpoint=True)
+        else:
+            sign = 1
+            color = 'blue'
+            xdata = np.linspace(-180, 85, 200, endpoint=True)
+            
+        print xdata[0]
+                        
+        def plot_fit(kpi=0):
+            commanded_turn = 1*xdata+ sign*(90) + kpi*360
+            actual_turn = 0.5*np.tan( (commanded_turn)*np.pi/180./2)*180/np.pi  + commanded_turn
+            #ax.plot(xdata, actual_turn, color=color)
+            ax.plot(xdata, commanded_turn, '--', color=color)
+            
+        kpis = [-1, 0, 1]
+        for kpi in kpis:
+            plot_fit(kpi)
+            
+            
+    plot_unwrapped()
+    plot_wrapped(ax, right, left, 'red')
+    plot_wrapped(ax, left, right, 'blue')
+    plot_cluster_fit('right')
+    plot_cluster_fit('left')
+    
+    if dataset_landing is not None:
+        ax.scatter(dataset_landing.saccades.angle_to_post*180/np.pi, dataset_landing.saccades.true_turn_angle*180./np.pi, c='green', linewidth=0, s=3)
+        xdata = np.linspace(-180, 180, 200, endpoint=True)
+        commanded_turn = 1*xdata
+        actual_turn = 0.4*np.tan( (commanded_turn)*np.pi/180./2.)*180/np.pi  + commanded_turn
+        ax.plot(xdata, commanded_turn, '--', color='green')
+        ax.plot(xdata, actual_turn, '-', color='green')
+    
+    
+    # prep plot    
+    yticks = [-360, -180, -90, 0, 90, 180, 360]
+    xticks = [-180, -90, 0, 90, 180]
+    fpl.adjust_spines(ax, ['left', 'bottom'], xticks=xticks, yticks=yticks, smart_bounds=True)
+    ax.set_aspect('equal')
+    
+    ax.set_xlim([np.min(xticks), np.max(xticks)])
+    ax.set_ylim([np.min(yticks), np.max(yticks)])
+    
+    xlabel = 'Angle to post before turn'
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel('Turn angle')
+    
+    fname = 'flyby_saccade_plot_flipsy.pdf'
+    fig.savefig(fname, format='pdf')
+    
+    
+def get_keys_turn_angle_outliers(dataset):
+
+    angle_to_post_after_turn = dataset.saccades.angle_to_post_after_turn
+    
+    
+    right = np.where(angle_to_post_after_turn > 0)[0].tolist()
+    left = np.where(angle_to_post_after_turn < 0)[0].tolist()
+    
+    angle_to_post = dataset.saccades.angle_to_post[right]
+    turn_angle = dataset.saccades.true_turn_angle[right]
+    
+    indices = np.where( turn_angle>angle_to_post )[0].tolist()
+    
+    print indices
+    
+    keys = [dataset.saccades.keys[i] for i in indices]
+    
+    return keys
+    
+    
 def get_flyby_saccade_clusters(dataset_flyby, dataset_landing=None):
     
     # landing line
@@ -369,6 +669,8 @@ def get_flyby_saccade_clusters(dataset_flyby, dataset_landing=None):
     for i, cluster in enumerate(clusters):
         indices = get_cluster_indices(saccades_flipsy, dataset_landing, cluster=cluster)
         ax.scatter(saccades_flipsy.angle_to_post[indices]*180/np.pi, saccades_flipsy.true_turn_angle[indices]*180/np.pi, c=color[i], s=3, linewidth=0)
+        
+        print cluster, str(len(saccades_flipsy.angle_to_post[indices]))
         
         # show the adjustments that were made to the data
         adjusted_indices_to_show = sorted( indices_adjusted.intersection(indices) )
@@ -415,8 +717,10 @@ def histogram_of_toward_away_from_post(dataset_flyby, dataset_landing):
     saccades = dataset_flyby.saccades
     
     # now get new clusters:
-    left_indices = np.where(saccades.true_turn_angle > 0)[0].tolist()
-    right_indices = np.where(saccades.true_turn_angle < 0)[0].tolist()
+    turn_angle = saccades.true_turn_angle
+    angle_to_post = saccades.angle_to_post
+    right_indices = np.where( (turn_angle < 0)*(turn_angle < angle_to_post) )[0].tolist()
+    left_indices = np.where( (turn_angle > 0)*(turn_angle > angle_to_post) )[0].tolist()
     
     fig = plt.figure()
     ax = fig.add_subplot(111)
@@ -599,30 +903,50 @@ def get_cluster_indices(saccades, dataset_landing, cluster='top'):
     return indices
 
             
-def flyby_histograms(dataset_flyby, dataset_landing):
-    evasive_indices, attractive_indices = get_evasive_and_attractive_indices(dataset_flyby, dataset_landing)
+def flyby_histograms(dataset_flyby, dataset_landing=None, plot=True, normed=True):
 
     fig = plt.figure()
     ax = fig.add_subplot(111)
     
-    fpl.histogram(ax, [np.log(dataset_flyby.saccades.angle_subtended_by_post)], colors=['orange'], bins=20, edgecolor='none', bar_alpha=1, curve_fill_alpha=0.3, curve_line_alpha=0, curve_butter_filter=[3,0.3], return_vals=False, show_smoothed=True, normed=False, normed_occurences=False, bootstrap_std=False, exponential_histogram=False, bin_width_ratio=0.5)
+    bins, hists, curves = fpl.histogram(ax, [np.log(dataset_flyby.saccades.angle_subtended_by_post)], colors=['orange'], bins=20, edgecolor='none', bar_alpha=1, curve_fill_alpha=0.3, curve_line_alpha=0, curve_butter_filter=[3,0.3], return_vals=True, show_smoothed=True, normed=normed, normed_occurences=False, bootstrap_std=False, exponential_histogram=False, bin_width_ratio=0.5)
     
-    yticks = np.linspace(0, 200, 3, endpoint=True)
+    print 'mean: ', np.mean(dataset_flyby.saccades.angle_subtended_by_post)*180./np.pi
+    print 'std: ', np.std(dataset_flyby.saccades.angle_subtended_by_post)*180./np.pi
+    
+    if normed is False:
+        yticks = np.linspace(0, 200, 3, endpoint=True)
+    else:
+        yticks = [0, 1]
     set_log_ticks(ax, yticks, radians=True)
     
-    fig.savefig('flyby_histograms.pdf', format='pdf')
+    xdata = np.log(np.linspace(5, 180, 100, endpoint=True)*np.pi/180.)
     
-def landing_histograms(dataset_landing):
+    mean = np.log(35*np.pi/180.)
+    std = np.log(12*np.pi/180.)
+    
+    # flyby pos gaussian:
+    gaus = np.exp(-1*(xdata-mean)**2 / (2*std**2)) * (1/(std*np.sqrt(2*np.pi)))
+    ax.plot(xdata, gaus/2)
+    
+    if plot:
+        fig.savefig('flyby_histograms.pdf', format='pdf')
+    
+    else:
+        return curves
+    
+def landing_histograms(dataset_landing, plot=True, normed=False):
     fig = plt.figure()
     ax = fig.add_subplot(111)
     
-    fpl.histogram(ax, [np.log(dataset_landing.saccades.angle_subtended_by_post)], colors=['blue'], bins=20, edgecolor='none', bar_alpha=1, curve_fill_alpha=0.3, curve_line_alpha=0, curve_butter_filter=[3,0.3], return_vals=False, show_smoothed=True, normed=False, normed_occurences=False, bootstrap_std=False, exponential_histogram=False, bin_width_ratio=0.5)
+    bins, hists, curves = fpl.histogram(ax, [np.log(dataset_landing.saccades.angle_subtended_by_post)], colors=['blue'], bins=20, edgecolor='none', bar_alpha=1, curve_fill_alpha=0.3, curve_line_alpha=0, curve_butter_filter=[3,0.3], return_vals=True, show_smoothed=True, normed=normed, normed_occurences=False, bootstrap_std=False, exponential_histogram=False, bin_width_ratio=0.5)
     
     yticks = np.linspace(0, 24, 3, endpoint=True)
     set_log_ticks(ax, yticks, radians=True)
     
-    fig.savefig('landing_histograms.pdf', format='pdf')
-    
+    if plot:
+        fig.savefig('landing_histograms.pdf', format='pdf')
+    else:
+        return curves
     
 def saccade_distance_histograms(dataset_flyby, dataset_landing, dataset_nopost_flyby, dataset_nopost_landing):
 
@@ -633,6 +957,9 @@ def saccade_distance_histograms(dataset_flyby, dataset_landing, dataset_nopost_f
     ax = fig.add_subplot(111)
     
     fpl.histogram(ax, [np.log(withpost), np.log(nopost)], colors=['black', 'green'], bins=24, edgecolor='none', bar_alpha=1, curve_fill_alpha=0.3, curve_line_alpha=0, curve_butter_filter=[3,0.3], return_vals=False, show_smoothed=True, normed=True, normed_occurences=False, bootstrap_std=False, exponential_histogram=False, bin_width_ratio=0.8)
+    
+    print 'N post: ', len(withpost)
+    print 'N no post: ', len(nopost)
     
     yticks = np.linspace(0, 0.8, 3, endpoint=True)
     set_log_ticks(ax, yticks, radians=True)
@@ -727,19 +1054,22 @@ def landing_deceleration_plot(dataset, show_regression=True, show_traces=False, 
     
     saccade_angles_to_post = []
     saccade_turn_angles = []
+    
+    post_type = 'checkered'
 
     def plot(trajec):
-        fd = trajec.frame_at_deceleration
-        #ax.plot( np.log(trajec.angle_subtended_by_post[fd]), trajec.speed[fd], '.', color='purple', linewidth=0, markersize=3)
-        speeds.append(trajec.speed[fd])
-        angles_subtended.append(np.log(trajec.angle_subtended_by_post[fd]))
-        angles_to_post.append(trajec.angle_to_post[fd]*180./np.pi)
-        filtered_keys.append(trajec.key)
+        if post_type in trajec.post_type:
+            fd = trajec.frame_at_deceleration
+            #ax.plot( np.log(trajec.angle_subtended_by_post[fd]), trajec.speed[fd], '.', color='purple', linewidth=0, markersize=3)
+            speeds.append(trajec.speed[fd])
+            angles_subtended.append(np.log(trajec.angle_subtended_by_post[fd]))
+            angles_to_post.append(trajec.angle_to_post[fd]*180./np.pi)
+            filtered_keys.append(trajec.key)
 
-        if len(trajec.last_saccade_range) > 0:
-            tmp = floris_math.fix_angular_rollover(trajec.angle_to_post[trajec.last_saccade_range[0]]-trajec.angle_to_post[trajec.last_saccade_range[-1]])
-            saccade_turn_angles.append(tmp)
-            saccade_angles_to_post.append(trajec.angle_to_post[trajec.last_saccade_range[0]])
+            if len(trajec.last_saccade_range) > 0:
+                tmp = floris_math.fix_angular_rollover(trajec.angle_to_post[trajec.last_saccade_range[0]]-trajec.angle_to_post[trajec.last_saccade_range[-1]])
+                saccade_turn_angles.append(tmp)
+                saccade_angles_to_post.append(trajec.angle_to_post[trajec.last_saccade_range[0]])
         
     for k, trajec in dataset.trajecs.items():
         if trajec.frame_at_deceleration is not None:
@@ -748,7 +1078,8 @@ def landing_deceleration_plot(dataset, show_regression=True, show_traces=False, 
                 if trajec.frame_at_deceleration > trajec.last_saccade_range[-1]:
                     plot(trajec)
                 else:
-                    keys_where_saccade_after_decel.append(k)
+                    if post_type in trajec.post_type:
+                        keys_where_saccade_after_decel.append(k)
             else:
                 plot(trajec)
                 
@@ -761,17 +1092,22 @@ def landing_deceleration_plot(dataset, show_regression=True, show_traces=False, 
     
     if show_regression:
         # calculate and plot linear regression    
-        fitfmin, std_error, Rsq = linear_fit.linear_fit_type1(angles_subtended, speeds, full_output=True, remove_outliers=True)
+        fitfmin, std_error, Rsq, intercept_confidence, slope_confidence = linear_fit.linear_fit_type1(angles_subtended, speeds, full_output=True, remove_outliers=True, return_confidence=True, alpha=0.1)
         
         xdata = np.linspace(np.log(5*np.pi/180.), np.log(180*np.pi/180.), 10, endpoint=True)
         ydata = np.polyval(fitfmin, xdata)
         ax.plot(xdata, ydata, '-', color='purple')
+        
+        ymin, ymax = linear_fit.get_confidence_envelope(xdata, intercept_confidence, slope_confidence)
+        #ax.fill_between(xdata, ymax, ymin, color='purple', alpha=0.25, linewidth=0)
         
         # print text of vals
         eqn = 'y = ' + str(fitfmin[0])[0:5] + 'x + ' + str(fitfmin[1])[0:5]
         rsq = 'Rsq: ' + str(Rsq)[0:5]
         s = eqn + '\n' + rsq + '\n' + 'N: ' + str(len(angles_subtended))
         ax.text( np.log(10*np.pi/180.), 0.3, s, color='purple')
+        
+        
         
     if 1: #show_where_saccade_after_decel:
         time_between_decel_and_saccade = []
@@ -959,6 +1295,181 @@ def heatmap_landing_trajecs(dataset_landing, dataset_flyby):
     
     fig.savefig('landing_deceleration_heatmap.pdf')
     
+
+def landing_envelope(dataset_landing, dataset_flyby):
+
+    speeds = []
+    angles_subtended = []
+    angle_to_post = []
+    for k, trajec in dataset_landing.trajecs.items():
+        speeds.extend(trajec.speed[0:trajec.frame_of_landing].tolist())
+        angles_subtended.extend(trajec.angle_subtended_by_post[0:trajec.frame_of_landing].tolist())
+        angle_to_post.extend(trajec.angle_to_post[0:trajec.frame_of_landing].tolist())
+    speeds = np.array(speeds)
+    angles_subtended = np.log(np.array(angles_subtended))
+    angle_to_post = np.abs(np.array(angle_to_post))
+
+    sac_speeds = []
+    sac_angles_subtended = []
+    sac_angle_to_post = []
+    for k, trajec in dataset_flyby.trajecs.items():
+        if len(trajec.last_saccade_range) > 0:
+            fs = trajec.last_saccade_range[0]
+            sac_speeds.append(trajec.speed[fs])
+            sac_angles_subtended.append(trajec.angle_subtended_by_post[fs])
+            sac_angle_to_post.append(trajec.angle_to_post[fs])
+    sac_speeds = np.array(sac_speeds)
+    sac_angles_subtended = np.log(np.array(sac_angles_subtended))
+    sac_angle_to_post = np.abs(np.array(sac_angle_to_post))
+    
+    def prep_ax(ax):
+        ax.set_xlim(np.log(5*np.pi/180.), np.log(180*np.pi/180.))
+        ax.set_ylim(0,1)
+        ax.set_aspect('auto')
+        yticks = np.linspace(0,1,5,endpoint=True)
+        set_log_ticks(ax, yticks=yticks, radians=True)        
+        ax.set_ylabel('Speed, m/s')
+        
+    colornorm = (0,5)
+    
+    ### angle subtended vs. speed ###
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    fpl.histogram2d(ax, angles_subtended, speeds, bins=50, normed=False, histrange=None, weights=None, logcolorscale=True, colormap='jet', interpolation='bicubic', colornorm=colornorm)
+    ax.scatter(sac_angles_subtended, sac_speeds, s=3, c='white', linewidth=0.5)
+    prep_ax(ax)
+    fig.savefig('retsize_vs_speed.pdf', format='pdf')
+    ###
+    
+    ### angle subtended vs. postangle ###
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    fpl.histogram2d(ax, angles_subtended, angle_to_post, bins=50, normed=False, histrange=None, weights=None, logcolorscale=True, colormap='jet', interpolation='bicubic', colornorm=colornorm)
+    ax.scatter(sac_angles_subtended, sac_angle_to_post, s=3, c='white', linewidth=0.5)
+    ax.set_xlim(np.log(5*np.pi/180.), np.log(180*np.pi/180.))
+    ax.set_ylim(0,np.pi)
+    ax.set_aspect('auto')
+    yticklabels = [0, 45, 90, 135, 180]
+    set_log_ticks(ax, yticks=np.array(yticklabels)*np.pi/180., radians=True)    
+    ax.set_yticklabels(yticklabels)
+    ax.set_ylabel('Post angle')
+    fig.savefig('retsize_vs_angle_subtended.pdf', format='pdf')
+    
+    ### postangle vs. speed ###
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    fpl.histogram2d(ax, angle_to_post, speeds, bins=50, normed=False, histrange=None, weights=None, logcolorscale=True, colormap='jet', interpolation='bicubic', colornorm=colornorm)
+    ax.scatter(sac_angle_to_post, sac_speeds, s=3, c='white', linewidth=0.5)
+    ax.set_xlim(0,np.pi)
+    ax.set_ylim(0,1)
+    ax.set_aspect('auto')
+    xticklabels = [0, 45, 90, 135, 180]
+    yticklabels = [0, 0.25, 0.5, 0.75, 1.0]
+    
+    fpl.adjust_spines(ax, ['right', 'bottom'], xticks=np.array(xticklabels)*np.pi/180., yticks=np.array(yticklabels))
+    
+    ax.set_xticklabels(xticklabels)
+    ax.set_yticklabels(yticklabels)
+    ax.set_ylabel('Speed, m/s')
+    ax.set_xlabel('Post angle')
+    fig.savefig('post_angle_vs_speed.pdf', format='pdf')
+    
+    
+    
+    
+    def get_angle_to_post_distribution(speeds_bin, angles_subtended_bin, speeds, angles_subtended, angle_to_post):
+        indices_speeds = (speeds >= speeds_bin[0]) * (speeds <= speeds_bin[1])
+        indices_angles_subtended = (angles_subtended >= angles_subtended_bin[0]) * (angles_subtended <= angles_subtended_bin[1]) 
+        indices = np.where( indices_speeds*indices_angles_subtended == 1 )[0]
+        if len(indices)>0:
+            indices=indices.tolist()
+            return angle_to_post[indices] 
+        else:
+            return [0,0]
+        
+    def get_minmax_angle_to_post(minmax, speeds_bin, angles_subtended_bin, speeds, angles_subtended, angle_to_post):
+        angle_to_post_dist = get_angle_to_post_distribution(speeds_bin, angles_subtended_bin, speeds, angles_subtended, angle_to_post)
+        if minmax=='min':
+            return np.min(angle_to_post_dist)
+        else:
+            return np.max(angle_to_post_dist)
+            
+    def get_zz(minmax, aa, ss, speeds, angles_subtended, angle_to_post):
+        zz = np.zeros_like(aa)
+        for i, a in enumerate(aa[0:-2]):
+            for j, s in enumerate(ss[0:-2]):
+                zz[i,j] = get_minmax_angle_to_post(minmax, [ss[i,j],ss[i+1,j+1]], [aa[i,j],aa[i+1,j+1]], speeds, angles_subtended, angle_to_post)
+        return zz
+        
+    def get_bin_for_sac(sac_speed, sac_angle_subtended, aa, ss):
+        sind_lo = np.where( (sac_speed >= ss[:,0]) == 1)[0][-1]
+        sind_hi = np.where( (sac_speed < ss[:,0]) == 1)[0][0]
+        sbin = [sind_lo, sind_hi]
+        
+        aind_lo = np.where( (sac_angle_subtended >= aa[0]) == 1)[0][-1]
+        aind_hi = np.where( (sac_angle_subtended < aa[0]) == 1)[0][0]
+        abin = [aind_lo, aind_hi]
+        return abin, sbin
+        
+    def get_zz_val(abin, sbin, zz):
+        val00 = zz[abin[0], sbin[0]]
+        val01 = zz[abin[0], sbin[1]]
+        val10 = zz[abin[1], sbin[0]]
+        val11 = zz[abin[1], sbin[1]]
+        return np.mean([val00, val01, val10, val11])
+        
+        
+    def is_sac_in_landing_envelope(sac_speed, sac_angle_subtended, sac_angle_to_post, aa, ss, zz_min, zz_max):
+        abin, sbin = get_bin_for_sac(sac_speed, sac_angle_subtended, aa, ss)
+        
+        is_above_min = sac_angle_to_post > get_zz_val(abin, sbin, zz_min)
+        is_below_max = sac_angle_to_post < get_zz_val(abin, sbin, zz_max)
+            
+        if (is_above_min*is_below_max):
+            return True
+        else:
+            return False
+            
+    nx, ny = 25,25
+    aa, ss = np.meshgrid(np.linspace(angles_subtended.min(), angles_subtended.max(), nx), 
+                         np.linspace(speeds.min(), speeds.max(), ny))
+    
+    
+    zz_min = get_zz('min', aa,ss, speeds, angles_subtended, angle_to_post)
+    zz_max = get_zz('max', aa,ss, speeds, angles_subtended, angle_to_post)
+    
+    colornorm = matplotlib.colors.Normalize(0,np.pi)
+    
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    ax.imshow(zz_min, extent=(aa.min(), aa.max(), ss.min(), ss.max()), origin='lower', interpolation='bicubic', norm=colornorm)
+    
+    fig2 = plt.figure()
+    ax2 = fig2.add_subplot(111)
+    ax2.imshow(zz_max, extent=(aa.min(), aa.max(), ss.min(), ss.max()), origin='lower', interpolation='bicubic', norm=colornorm)
+    
+    
+    #ax.scatter(np.log(angles_subtended), speeds, c=angle_to_post, linewidth=0, s=5)
+    
+    
+    # flyby plot                
+    if 1:
+        fig3 = plt.figure()
+        ax3 = fig3.add_subplot(111)
+        ax3.scatter(sac_angles_subtended, sac_speeds, c=sac_angle_to_post, s=5, linewidth=0, alpha=0.3, norm=colornorm)
+        bool_sac_in_landing_envelope = []
+        for i, a in enumerate(sac_angles_subtended):
+            bool_sac_in_landing_envelope.append( is_sac_in_landing_envelope(sac_speeds[i], sac_angles_subtended[i], sac_angle_to_post[i], aa, ss, zz_min, zz_max) )
+        print 'percent sacs in landing envelope: ', float(np.sum(bool_sac_in_landing_envelope)) / float(len(bool_sac_in_landing_envelope))
+
+                
+    prep_ax(ax)
+    prep_ax(ax2)
+    prep_ax(ax3)
+    
+    fig.savefig('landing_deceleration_min.pdf')
+    fig2.savefig('landing_deceleration_max.pdf')
+    fig3.savefig('flyby_saccade_space.pdf')
     
 def get_true_turn_angle_fit_from_speed_and_rel_turn_angle(dataset):
     

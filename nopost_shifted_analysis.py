@@ -145,9 +145,9 @@ def make_false_landing_and_flyby_datasets(dataset_nopost):
     fa.calc_func(shift, classify_false_post)
     fa.calc_func(shift, calc_frame_of_landing)
     
-    dataset_nopost_landing = make_behavior_dataset(shift, filename='dataset_nopost_landing', behavior='landing')
+    dataset_nopost_landing = make_behavior_dataset(shift, filename='dataset_nopost_landing_3cm', behavior='landing')
     
-    dataset_nopost_flyby = make_behavior_dataset(shift, filename='dataset_nopost_flyby', behavior='flyby')
+    dataset_nopost_flyby = make_behavior_dataset(shift, filename='dataset_nopost_flyby_3cm', behavior='flyby')
     
     fa.prep_dataset(dataset_nopost_landing)
     fa.calc_func(dataset_nopost_landing, saccade_analysis.calc_last_saccade)
@@ -156,11 +156,19 @@ def make_false_landing_and_flyby_datasets(dataset_nopost):
     fa.calc_func(dataset_nopost_flyby, saccade_analysis.calc_last_saccade)
     
     #fa.save(dataset_nopost_landing, 'dataset_nopost_landing')
-    fa.save(dataset_nopost_flyby, 'dataset_nopost_flyby')
+    fa.save(dataset_nopost_flyby, 'dataset_nopost_flyby_3cm')
     
     return dataset_nopost_landing, dataset_nopost_flyby
     
     
+    
+def limit_to_3cm(dataset):
+    
+    for k, trajec in dataset.trajecs.items():
+        if trajec.dist_to_stim_r_normed[trajec.frame_nearest_to_post] > 0.03:
+            del(dataset.trajecs[k])
+            
+            
     
     
     

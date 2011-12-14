@@ -21,6 +21,8 @@ def collect_saccade_data(dataset, behavior=['landing', 'flyby'], last_saccade_on
     saccades.speed = []
     saccades.expansion = []
     saccades.angular_velocity = []
+    saccades.xvelocity = []
+    saccades.post_type = []
     
     if last_saccade_only:
         for k, trajec in dataset.trajecs.iteritems():
@@ -29,11 +31,11 @@ def collect_saccade_data(dataset, behavior=['landing', 'flyby'], last_saccade_on
                     sac_range = trajec.last_saccade_range
                     angle_subtended = trajec.angle_subtended_by_post[sac_range[0]]
                     if angle_subtended > min_angle*np.pi/180.:
-                        angle_of_saccade = sac.get_angle_of_saccade(trajec, sac_range)
+                        angle_of_saccade = sac.get_angle_of_saccade(trajec, sac_range, method='integral')
                         saccades.keys.append(k)
                         saccades.angle_to_post.append(trajec.angle_to_post[sac_range[0]])
                         saccades.angle_to_post_after_turn.append(trajec.angle_to_post[sac_range[-1]])
-                        
+                        saccades.xvelocity.append(trajec.velocities[sac_range[0],0])
                         saccades.true_turn_angle.append(angle_of_saccade)
                         
                         saccades.turn_angle.append(trajec.angle_to_post[sac_range[0]] - trajec.angle_to_post[sac_range[-1]])
@@ -45,6 +47,10 @@ def collect_saccade_data(dataset, behavior=['landing', 'flyby'], last_saccade_on
                         
                         saccades.angular_velocity.append( saccades.true_turn_angle[-1] / (float(len(sac_range))/trajec.fps) )
                         
+                        if 'black' in trajec.post_type:
+                            saccades.post_type.append( 1 )
+                        elif 'checkered' in trajec.post_type:
+                            saccades.post_type.append( 0 )
     else:
         print 'calculating for all saccades prior to nearest approach to post'
         for k, trajec in dataset.trajecs.iteritems():
@@ -79,8 +85,10 @@ def collect_saccade_data(dataset, behavior=['landing', 'flyby'], last_saccade_on
     saccades.speed = np.array(saccades.speed)
     saccades.expansion = np.array(saccades.expansion)
     saccades.angular_velocity = np.array(saccades.angular_velocity)
+    saccades.xvelocity = np.array(saccades.xvelocity)
     
     saccades.angle_to_far_edge = saccades.angle_to_post + np.sign(saccades.angle_to_post)*saccades.angle_subtended_by_post/2.
     saccades.angle_to_near_edge = saccades.angle_to_post - np.sign(saccades.angle_to_post)*saccades.angle_subtended_by_post/2.
+    saccades.post_type = np.array(saccades.post_type)
     
     dataset.saccades = saccades
